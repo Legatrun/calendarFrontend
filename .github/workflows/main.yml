@@ -1,62 +1,58 @@
-name: Deploy to S3 (Frontend via CloudFront)
+name: Deploy Frontend to S3 + CloudFront
 
 on:
   push:
-    branches: [ "main" ] # Se dispara al hacer push a la rama 'main'
+    branches: [ "main" ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
-    # Permisos necesarios para usar el IAM Role (OIDC)
-    permissions: 
-      id-token: write 
+
+    permissions:
+      id-token: write
       contents: read
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
-    # --- 1. Configurar Credenciales de AWS (Asumir IAM Role) ---
+
+    # --- 1. Asumir IAM Role con OIDC ---
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }} 
-        aws-region: ${{ secrets.AWS_REGION }} 
+        role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+        aws-region: ${{ secrets.AWS_REGION }}
 
-    # --- 2. Preparar el Entorno Node.js ---
-    - name: Setup Node.js environment
+    # --- 2. Node environment ---
+    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20' # Ajusta si usas otra versión
-        cache: 'npm'
-        
+        node-version: 20
+        cache: npm
+
     - name: Install dependencies
       run: npm ci
 
-    # --- 3. Construir el Frontend (Vite Build) ---
+    # --- 3. Build Vite ---
     - name: Build project
       run: npm run build
       env:
-        # Pasa la URL del backend al proceso de compilación
         VITE_BACKEND_API_URL: ${{ secrets.VITE_BACKEND_API_URL }}
 
-    # --- 4. Sincronizar con Amazon S3 ---
-    - name: Deploy to S3 Bucket
-      uses: aws-actions/s3-sync@v4
-      with:
-        bucket: ${{ secrets.S3_BUCKET_NAME }}
-        source: "dist" # Directorio de salida de Vite
-        # Configuración de caché crítica para SPAs (index.html sin caché)
-        cache: |
-          "**/*.js,**/*.css,**/*.svg": max-age=31536000,immutable
-          "index.html": max-age=0,no-cache,no-store,must-revalidate
-        delete-removed: true # Eliminar archivos en S3 que ya no están en 'dist'
+    # --- 4. Deploy a S3 (via AWS CLI) ---
+    - name: Sync to S3
+      run: |
+        aws s3 sync dist s3://${{ secrets.S3_BUCKET_NAME }} --delete \
+          --cache-control "max-age=31536000,public"
         
-    # --- 5. Invalidar Caché de CloudFront ---
-    - name: Invalidate CloudFront Cache
-      uses: aws-actions/cloudfront-invalidate-action@v3
-      with:
-        distribution-id: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
-        # Asegura que el index y los assets principales se actualicen inmediatamente
-        paths: '/index.html /assets/*'
+        # Ajustar index.html para evitar cache
+        aws s3 cp dist/index.html s3://${{ secrets.S3_BUCKET_NAME }}/index.html \
+          --cache-control "max-age=0,no-cache,no-store,must-revalidate" \
+          --content-type "text/html"
+
+    # --- 5. CloudFront Invalidation ---
+    - name: Create CloudFront invalidation
+      run: |
+        aws cloudfront create-invalidation \
+          --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+          --paths "/*"
