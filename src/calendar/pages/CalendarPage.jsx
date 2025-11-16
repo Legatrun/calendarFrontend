@@ -1,83 +1,84 @@
-import { useEffect } from 'react';
-import { useState } from 'react';
-import { Calendar } from 'react-big-calendar'
-import 'react-big-calendar/lib/css/react-big-calendar.css';
+import { useEffect } from "react";
+import { useState } from "react";
+import { Calendar } from "react-big-calendar";
+import "react-big-calendar/lib/css/react-big-calendar.css";
 
-import { Navbar, CalendarEvent, CalendarModal, FabAddNew, FabDelete } from '../'
+import {
+  Navbar,
+  CalendarEvent,
+  CalendarModal,
+  FabAddNew,
+  FabDelete,
+} from "../";
 
-import { localizer, getMessagesES } from '../../helpers'
-import { useAuthStore, useCalendarStore, useUiStore } from '../../hooks';
-
-
+import { localizer, getMessagesES } from "../../helpers";
+import { useAuthStore, useCalendarStore, useUiStore } from "../../hooks";
 
 export const CalendarPage = () => {
+  const { user } = useAuthStore();
 
-    const { user } = useAuthStore()
+  const { openDateModal } = useUiStore();
+  const { events, setActiveEvent, startLoadingEvents } = useCalendarStore();
 
-    const { openDateModal } = useUiStore()
-    const { events, setActiveEvent, startLoadingEvents } = useCalendarStore()
+  const [lastView, setLastView] = useState(
+    localStorage.getItem("lastView") || "week"
+  );
 
-    const [lastView, setLastView] = useState(localStorage.getItem('lastView') || 'week')
+  const eventStyleGetter = (event, start, end, isSelectec) => {
+    const isMyEvent = user.uid === event.userId;
 
-    const eventStyleGetter = (event, start, end, isSelectec) => {
+    const style = {
+      backgroundColor: isMyEvent ? "#347Cf7" : "#465660",
+      borderRadius: "0px",
+      opacity: 0.8,
+      color: "white",
+    };
+    return {
+      style,
+    };
+  };
 
-        const isMyEvent = (user.uid === event.user._id) || (user.uid === event.user.uid)
+  const onDoubleClick = (event) => {
+    openDateModal();
+  };
 
-        const style = {
-            backgroundColor: isMyEvent ? '#347Cf7' : '#465660',
-            borderRadius: '0px',
-            opacity: 0.8,
-            color: 'white'
-        }
-        return {
-            style
-        }
-    }
+  const onSelect = (event) => {
+    // console.log({ click: event })
+    setActiveEvent(event);
+  };
 
-    const onDoubleClick = (event) => {
-        openDateModal()
-    }
+  const onViewChanged = (event) => {
+    localStorage.setItem("lastView", event);
+  };
 
-    const onSelect = (event) => {
-        // console.log({ click: event })
-        setActiveEvent(event)
+  useEffect(() => {
+    startLoadingEvents();
+  }, []);
 
-    }
+  return (
+    <>
+      <Navbar />
 
-    const onViewChanged = (event) => {
-        localStorage.setItem('lastView', event)
-    }
-
-    useEffect(() => {
-        startLoadingEvents()
-    }, [])
-
-
-
-    return (
-        <>
-            <Navbar />
-
-            <Calendar
-                culture='es'
-                localizer={localizer}
-                events={events}
-                defaultView={lastView}
-                startAccessor="start"
-                endAccessor="end"
-                style={{ height: 'calc( 100vh - 80px)' }}
-                messages={getMessagesES()}
-                eventPropGetter={eventStyleGetter}
-                components={{
-                    event: CalendarEvent
-                }}
-                onDoubleClickEvent={onDoubleClick}
-                onSelectEvent={onSelect}
-                onView={onViewChanged}
-            />
-            <CalendarModal />
-            <FabAddNew />
-            <FabDelete />
-        </>
-    )
-}
+      <Calendar
+        culture="es"
+        localizer={localizer}
+        events={events}
+        defaultView={lastView}
+        startAccessor="start"
+        endAccessor="end"
+        style={{ height: "calc( 100vh - 80px)" }}
+        messages={getMessagesES()}
+        eventPropGetter={eventStyleGetter}
+        components={{
+          event: CalendarEvent,
+        }}
+        onDoubleClickEvent={onDoubleClick}
+        onSelectEvent={onSelect}
+        onView={onViewChanged}
+      />
+      <CalendarModal />
+      <FabAddNew />
+      <FabDelete />
+    </>
+  );
+};
